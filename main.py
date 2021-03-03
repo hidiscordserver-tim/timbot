@@ -19,12 +19,18 @@ debates_message_history = pd.DataFrame([['None',datetime(2000,1,1)]]*10)
 debates_message_history.columns = ['User', 'Time']
 debates_status = [0, 0.0] # [Num Users, Mean Time]
 debates_status_code = 0 # 0: None, 1: Warning, 2: Slowmode
+mod_update_channel = None
 
-mod_update_channel = client.get_channel(os.getenv("MOD_UPDATE_CHANNEL"))
+async def debates_update(num_users, mean_time, status):
+    global mod_update_channel
+    await mod_update_channel.send('#debates Update\nUsers: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus ' + str(status))
 
 @client.event
 async def on_ready():
+    global mod_update_channel
     print("bot online")
+    mod_update_channel = [x for x in client.get_all_channels() if x.name == os.getenv("MOD_UPDATE_CHANNEL")][0]
+    await debates_update(0, 0, 10)
 
 @client.event
 async def on_message(msg):
@@ -46,24 +52,24 @@ async def on_message(msg):
             if debates_status_code != 1:
                 debates_status_code = 1
                 await msg.channel.edit(slowmode_delay=0)
-                await msg.channel.send('#debates Update\nUsers: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 1')
+                await debates_update(num_users, mean_time, 1)
                 update_posted = True
         elif num_users >= 3 and mean_time < 5:
             if debates_status_code != 2:
                 debates_status_code = 2
                 await msg.channel.edit(slowmode_delay=15)
-                await msg.channel.send('#debates Update\nUsers: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 2')
+                await debates_update(num_users, mean_time, 2)
                 update_posted = True
         else:
             if debates_status_code != 0:
                 debates_status_code = 0
                 await msg.channel.edit(slowmode_delay=0)
-                await msg.channel.send('#debates Update\nUsers: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 0')
+                await debates_update(num_users, mean_time, 0)
                 update_posted = True
 
         if debates_status[0] != debates_status_old[0] or (debates_status[1] - debates_status_old[1]) > 5:
             # Post an update if it's newsworthy, even if the status code hasn't changed.
             if not update_posted:
-                await msg.channel.send('#debates Update\nUsers: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus ' + str(debates_status_code))
+                await debates_update(num_users, mean_time, debates_status_code)
 
 client.run(os.getenv("TOKEN"))
