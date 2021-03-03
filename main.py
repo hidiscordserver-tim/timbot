@@ -1,35 +1,54 @@
-
 import discord
 import os
 import time
 import discord.ext
 from discord.utils import get
 from discord.ext import commands, tasks
-from discord.ext.commands import has_permissions,  CheckFailure, check
+from discord.ext.commands import has_permissions, CheckFailure, check
 from dotenv import load_dotenv
+import pandas as pd
+from datetime import datetime, timedelta
+
+intents = discord.Intents(messages=True)
 
 load_dotenv()
-
 client = discord.Client()
+client = commands.Bot(command_prefix = '-T ')
 
-client = commands.Bot(command_prefix = '-T ') #put your own prefix here
+debates_message_history = pd.DataFrame([['None',datetime(2000,1,1)]]*10)
+debates_message_history.columns = ['User', 'Time']
+debates_status = False # 0: None, 1: Warning, 2: Slowmode
 
 @client.event
 async def on_ready():
-    print("bot online") #will print "bot online" in the console when the bot is online
+    print("bot online")
 
-@client.command()
-async def ping(ctx):
-    await ctx.send("pong!") #simple command so that when you type "!ping" the bot will respond with "pong!"
+@client.event
+async def on_message(msg):
+    if msg.channel.name == 'debates' and not msg.author.bot:
+        global debates_message_history
+        global debates_status
 
-async def kick(ctx, member : discord.Member):
-    try:
-        await member.kick(reason=None)
-        await ctx.send("kicked "+member.mention) #simple kick command to demonstrate how to get and use member mentions
-    except:
-        await ctx.send("bot does not have the kick members permission!")
+        debates_message_history = debates_message_history.append({'Time':msg.created_at, 'User':msg.author}, ignore_index=True)
+        debates_message_history = debates_message_history.shift(-1).reset_index(drop=True).dropna()
 
+        num_users = len(debates_message_history.loc[~(debates_message_history['User']=='None'), 'User'].drop_duplicates())
+        mean_time = (debates_message_history.loc[~(debates_message_history['Time']==datetime(2000,1,1)), 'Time'].shift(-1) - debates_message_history.loc[~(debates_message_history['Time']==datetime(2000,1,1)), 'Time']).dropna().mean().total_seconds()
 
-client.run(os.getenv("TOKEN")) #get your bot token and make a file called ".env" then inside the file write TOKEN=put your api key here example in env.txt
-#to keep your bot from shutting down use https://uptimerobot.com then create a https:// monitor and put the link to the website that appewars when you run this repl in the monitor and it will keep your bot alive by pinging the flask server
-#enjoy!
+        if num_users == 2 and mean_time < 5:
+            if debates_status != 1:
+                await msg.channel.edit(slowmode_delay=0)
+                await msg.channel.send('Users: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 1 (monitoring)')
+                debates_status = 1
+        elif num_users >= 3 and mean_time < 5:
+            if debates_status != 2:
+                await msg.channel.edit(slowmode_delay=15)
+                await msg.channel.send('Users: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 2 (slow-mode)')
+                debates_status = 2
+        else:
+            if debates_status != 0:
+                await msg.channel.edit(slowmode_delay=0)
+                await msg.channel.send('Users: ' + str(num_users) + '\nMean Message Gap: ' + str(mean_time) + ' s\nStatus 0 (normal)')
+                debates_status = 0
+
+client.run(os.getenv("TOKEN"))
