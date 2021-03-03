@@ -48,6 +48,10 @@ async def on_message(msg):
         debates_status_old = [x for x in debates_status] # Copy don't reference!
         debates_status = [num_users, mean_time]
 
+        print(debates_status)
+
+        update_posted = False
+
         if num_users == 2 and mean_time < 5:
             if debates_status_code != 1:
                 debates_status_code = 1
@@ -71,5 +75,9 @@ async def on_message(msg):
             # Post an update if it's newsworthy, even if the status code hasn't changed.
             if not update_posted:
                 await debates_update(num_users, mean_time, debates_status_code)
+
+@client.command()
+async def debates(ctx):
+    await debates_update(debates_status[0], debates_status[1], debates_status_code)
 
 client.run(os.getenv("TOKEN"))
